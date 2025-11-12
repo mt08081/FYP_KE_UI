@@ -29,28 +29,32 @@ function initMap() {
         iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
     });
 
-    // Add Markers
-    L.marker([24.9341, 67.0922], {icon: redIcon}) // T-2101 (Johar Chowrangi)
+    // Add Markers with popups only (no direct navigation on click)
+    var marker1 = L.marker([24.9341, 67.0922], {icon: redIcon})
         .addTo(map)
-        .bindPopup('<b>ID: T-2101</b><br>Status: Critical<br>Rec: REPLACE');
+        .bindPopup('<div style="text-align: center;"><b>ID: T-2101</b><br>Status: Critical<br>Health: 22/100<br>Rec: REPLACE<br><br><button onclick="showDetail(\'T-2101\')" class="btn btn-sm btn-primary" style="margin-top: 5px;">View Details</button></div>');
 
-    L.marker([24.9138, 67.0322], {icon: redIcon}) // T-4091 (Nazimabad)
+    var marker2 = L.marker([24.9138, 67.0322], {icon: redIcon})
         .addTo(map)
-        .bindPopup('<b>ID: T-4091</b><br>Status: Critical<br>Rec: Maintenance');
+        .bindPopup('<div style="text-align: center;"><b>ID: T-4091</b><br>Status: Critical<br>Health: 18/100<br>Rec: Maintenance<br><br><button onclick="showDetail(\'T-4091\')" class="btn btn-sm btn-primary" style="margin-top: 5px;">View Details</button></div>');
 
-    L.marker([24.8118, 67.0327], {icon: yellowIcon}) // T-5500 (DHA Phase 2)
+    var marker3 = L.marker([24.8118, 67.0327], {icon: yellowIcon})
         .addTo(map)
-        .bindPopup('<b>ID: T-5500</b><br>Status: Warning<br>Rec: Monitor');
+        .bindPopup('<div style="text-align: center;"><b>ID: T-5500</b><br>Status: Warning<br>Health: 45/100<br>Rec: Monitor<br><br><button onclick="showDetail(\'T-5500\')" class="btn btn-sm btn-primary" style="margin-top: 5px;">View Details</button></div>');
 
-    L.marker([24.9200, 67.1143], {icon: blueIcon}) // F-102 (Habib University)
+    var marker4 = L.marker([24.9200, 67.1143], {icon: blueIcon})
         .addTo(map)
-        .bindPopup('<b>ID: F-102</b><br>Status: Active Fault<br>Est. Recovery: ~45 mins');
+        .bindPopup('<div style="text-align: center;"><b>ID: F-102</b><br>Status: Active Fault<br>Est. Recovery: ~45 mins<br><br><button onclick="showDetail(\'F-102\')" class="btn btn-sm btn-primary" style="margin-top: 5px;">View Details</button></div>');
 
-    L.marker([24.7969, 67.0384], {icon: greenIcon}) // T-6000 (Boat Basin)
+    var marker5 = L.marker([24.7969, 67.0384], {icon: greenIcon})
         .addTo(map)
-        .bindPopup('<b>ID: T-6000</b><br>Status: Healthy');
+        .bindPopup('<div style="text-align: center;"><b>ID: T-6000</b><br>Status: Healthy<br>Health: 92/100<br><br><button onclick="showDetail(\'T-6000\')" class="btn btn-sm btn-primary" style="margin-top: 5px;">View Details</button></div>');
     
-    L.marker([24.8080, 67.0504], {icon: blueIcon}) // F-105 (DHA Phase 5)
+    var marker6 = L.marker([24.8080, 67.0504], {icon: blueIcon})
         .addTo(map)
-        .bindPopup('<b>ID: F-105</b><br>Status: Active Fault<br>Est. Recovery: ~2.5 hours');
+        .bindPopup('<div style="text-align: center;"><b>ID: F-105</b><br>Status: Active Fault<br>Est. Recovery: ~2.5 hours<br><br><button onclick="showDetail(\'F-105\')" class="btn btn-sm btn-primary" style="margin-top: 5px;">View Details</button></div>');
+    
+    var marker7 = L.marker([24.8848, 67.0631], {icon: yellowIcon})
+        .addTo(map)
+        .bindPopup('<div style="text-align: center;"><b>ID: T-8822</b><br>Status: Warning<br>Health: 48/100<br>Rec: Load Balancing<br><br><button onclick="showDetail(\'T-8822\')" class="btn btn-sm btn-primary" style="margin-top: 5px;">View Details</button></div>');
 }

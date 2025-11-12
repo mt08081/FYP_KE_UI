@@ -3,12 +3,14 @@
 // ===================================
 function filterTable() {
     // Get filter values
-    const regionFilter = document.getElementById('filter-region').value;
-    const riskFilter = document.getElementById('filter-risk').value;
-    const searchFilter = document.getElementById('filter-search').value.toLowerCase();
+    const regionFilter = document.getElementById('filter-region') ? document.getElementById('filter-region').value : 'all';
+    const riskFilter = document.getElementById('filter-risk') ? document.getElementById('filter-risk').value : 'all';
+    const searchFilter = document.getElementById('filter-search') ? document.getElementById('filter-search').value.toLowerCase() : '';
     
     // Get table body and rows
     const tableBody = document.getElementById('transformer-table-body');
+    if (!tableBody) return;
+    
     const rows = tableBody.getElementsByTagName('tr');
 
     // Loop through all table rows
@@ -16,8 +18,8 @@ function filterTable() {
         const row = rows[i];
         
         // Get row data
-        const region = row.getAttribute('data-region');
-        const risk = row.getAttribute('data-risk');
+        const region = row.getAttribute('data-region') || '';
+        const risk = row.getAttribute('data-risk') || '';
         const text = row.textContent || row.innerText;
 
         // Check for matches
@@ -32,4 +34,10 @@ function filterTable() {
             row.style.display = "none";
         }
     }
+}
+
+// Apply filters function for transformer list page
+function applyTransformerFilters() {
+    // This can be expanded for the full transformer list page
+    filterTable();
 }
