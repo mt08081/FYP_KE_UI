@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K-Electric Predictive Maintenance Dashboard</title>
+    
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    
+    <!-- Leaflet Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        :root {
+            --ke-blue: #00529b;
+            --ke-orange: #f7931e;
+            --risk-extreme: #dc3545;
+            --risk-high: #fd7e14;
+            --risk-medium: #ffc107;
+            --risk-secure: #28a745;
+        }
+        
+        body {
+            background: #f0f2f5;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+        
+        /* Header */
+        .main-header {
+            background: linear-gradient(135deg, var(--ke-blue) 0%, #003d75 100%);
+            color: white;
+            padding: 1rem 0;
+            box-shadow: 0 2px 15px rgba(0,0,0,0.15);
+        }
+        
+        .main-header h1 {
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        /* Cards */
+        .dashboard-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            border: none;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .dashboard-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+        }
+        
+        .dashboard-card .card-header {
+            background: transparent;
+            border-bottom: 1px solid #eee;
+            font-weight: 600;
+            padding: 1rem 1.25rem;
+        }
+        
+        /* Stat Cards */
+        .stat-card {
+            padding: 1.5rem;
+            border-radius: 12px;
+            color: white;
+        }
+        
+        .stat-card.total { background: linear-gradient(135deg, #667eea, #764ba2); }
+        .stat-card.in-progress { background: linear-gradient(135deg, #f6d365, #fda085); color: #333; }
+        .stat-card.completed { background: linear-gradient(135deg, #11998e, #38ef7d); }
+        .stat-card.new-faults { background: linear-gradient(135deg, #4facfe, #00f2fe); }
+        
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+        
+        .stat-label {
+            opacity: 0.9;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+        
+        /* Map */
+        #plantMap {
+            height: 350px;
+            border-radius: 0 0 12px 12px;
+        }
+        
+        /* Risk Badges */
+        .risk-badge {
+            padding: 0.35rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .risk-extreme { background: #fce4e4; color: var(--risk-extreme); }
+        .risk-high { background: #fff3e0; color: #e65100; }
+        .risk-medium { background: #fff8e1; color: #f57c00; }
+        .risk-secure { background: #e8f5e9; color: var(--risk-secure); }
+        
+        /* Status Badges */
+        .status-badge {
+            padding: 0.3rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        /* Prediction Section */
+        .prediction-panel {
+            background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+        
+        .prediction-result {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-top: 1rem;
+        }
+        
+        .prediction-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--ke-blue);
+        }
+        
+        /* Table */
+        .fault-table {
+            font-size: 0.9rem;
+        }
+        
+        .fault-table thead {
+            background: #f8f9fa;
+        }
+        
+        .fault-table tbody tr {
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        
+        .fault-table tbody tr:hover {
+            background: #f0f7ff;
+        }
+        
+        /* Charts */
+        .chart-container {
+            position: relative;
+            height: 220px;
+        }
+        
+        /* Loading */
+        #loadingOverlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(255,255,255,0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        
+        /* Info Tooltips */
+        .info-icon {
+            color: #6c757d;
+            cursor: help;
+            font-size: 0.9rem;
+        }
+        
+        /* Section titles */
+        .section-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .section-title i {
+            color: var(--ke-orange);
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay">
+        <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;"></div>
+        <h5 class="text-primary">Loading Dashboard</h5>
+        <p class="text-muted">Connecting to prediction server...</p>
+    </div>
+
+    <!-- Header -->
+    <header class="main-header">
+        <div class="container-fluid px-4">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1><i class="bi bi-lightning-charge-fill me-2"></i>K-Electric</h1>
+                    <small class="opacity-75">Predictive Maintenance Dashboard</small>
+                </div>
+                <div class="text-end">
+                    <span class="badge bg-success me-2">
+                        <i class="bi bi-circle-fill me-1" style="font-size: 0.5rem;"></i>API Connected
+                    </span>
+                    <small class="opacity-75" id="lastUpdate"></small>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container-fluid px-4 py-4">
+        <!-- Stats Row -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="stat-card total">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <div class="stat-value" id="statTotal">-</div>
+                            <div class="stat-label">Total Fault Records</div>
+                        </div>
+                        <i class="bi bi-database-fill" style="font-size: 2rem; opacity: 0.5;"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card in-progress">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <div class="stat-value" id="statInProgress">-</div>
+                            <div class="stat-label">In Progress</div>
+                        </div>
+                        <i class="bi bi-hourglass-split" style="font-size: 2rem; opacity: 0.5;"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card completed">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <div class="stat-value" id="statCompleted">-</div>
+                            <div class="stat-label">Completed</div>
+                        </div>
+                        <i class="bi bi-check-circle-fill" style="font-size: 2rem; opacity: 0.5;"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card new-faults">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <div class="stat-value" id="statNew">-</div>
+                            <div class="stat-label">New Faults</div>
+                        </div>
+                        <i class="bi bi-plus-circle-fill" style="font-size: 2rem; opacity: 0.5;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="row g-4">
+            <!-- Left Column -->
+            <div class="col-lg-8">
+                <!-- Map Card -->
+                <div class="dashboard-card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-geo-alt-fill text-danger me-2"></i>Plant Locations & Risk Zones</span>
+                        <div class="d-flex gap-2" style="font-size: 0.8rem;">
+                            <span><i class="bi bi-circle-fill text-danger"></i> Extreme</span>
+                            <span><i class="bi bi-circle-fill" style="color: var(--risk-high);"></i> High</span>
+                            <span><i class="bi bi-circle-fill" style="color: var(--risk-medium);"></i> Medium</span>
+                            <span><i class="bi bi-circle-fill text-success"></i> Secure</span>
+                        </div>
+                    </div>
+                    <div id="plantMap"></div>
+                </div>
+
+                <!-- Fault Records Table -->
+                <div class="dashboard-card">
+                    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <span><i class="bi bi-list-ul text-primary me-2"></i>Recent Fault Records</span>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <select class="form-select form-select-sm" id="filterStatus" style="width: auto;">
+                                <option value="">All Status</option>
+                                <option value="IN_PROGRESS">In Progress</option>
+                                <option value="COMPLETED">Completed</option>
+                                <option value="ON_HOLD">On Hold</option>
+                                <option value="NEW">New</option>
+                            </select>
+                            <select class="form-select form-select-sm" id="filterPlant" style="width: auto;">
+                                <option value="">All Plants</option>
+                            </select>
+                            <select class="form-select form-select-sm" id="filterRisk" style="width: auto;">
+                                <option value="">All Risk Levels</option>
+                                <option value="Extreme">Extreme</option>
+                                <option value="High">High</option>
+                                <option value="Medium">Medium</option>
+                                <option value="Secure">Secure</option>
+                            </select>
+                            <select class="form-select form-select-sm" id="filterFault" style="width: auto;">
+                                <option value="">All Fault Types</option>
+                                <option value="Motor Failure">Motor Failure</option>
+                                <option value="Short Circuit">Short Circuit</option>
+                                <option value="Leak">Leak</option>
+                                <option value="Sensor Fault">Sensor Fault</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table fault-table mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Plant</th>
+                                        <th>Fault Type</th>
+                                        <th>Risk Level</th>
+                                        <th>Status</th>
+                                        <th>Duration</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="faultsTable">
+                                    <tr><td colspan="6" class="text-center py-4">Loading...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column -->
+            <div class="col-lg-4">
+                <!-- ML Prediction Panel -->
+                <div class="dashboard-card mb-4">
+                    <div class="card-header">
+                        <i class="bi bi-cpu-fill text-primary me-2"></i>ML Fault Prediction
+                        <i class="bi bi-info-circle info-icon ms-2" 
+                           data-bs-toggle="tooltip" 
+                           title="Select a plant to predict what fault might occur and how long repairs would take. The area is determined by the plant location."></i>
+                    </div>
+                    <div class="card-body">
+                        <div class="prediction-panel">
+                            <form id="predictionForm">
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Select Plant</label>
+                                    <select class="form-select" id="predPlant" required>
+                                        <option value="">Choose a plant...</option>
+                                    </select>
+                                    <div class="form-text" id="plantAreaInfo"></div>
+                                </div>
+                                
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label small">Temperature (°C)</label>
+                                        <input type="number" class="form-control form-control-sm" id="predTemp" 
+                                               value="32" min="15" max="50" step="0.5">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">Wind (km/h)</label>
+                                        <input type="number" class="form-control form-control-sm" id="predWind" 
+                                               value="15" min="0" max="100" step="0.5">
+                                    </div>
+                                </div>
+                                
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="bi bi-lightning-charge me-1"></i>Get Prediction
+                                </button>
+                            </form>
+                        </div>
+                        
+                        <div id="predictionResult"></div>
+                    </div>
+                </div>
+
+                <!-- Charts -->
+                <div class="dashboard-card mb-4">
+                    <div class="card-header">
+                        <i class="bi bi-pie-chart-fill text-info me-2"></i>Fault Type Distribution
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="faultChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-card">
+                    <div class="card-header">
+                        <i class="bi bi-bar-chart-fill text-success me-2"></i>Faults by Area
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="areaChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Section -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="dashboard-card">
+                    <div class="card-header">
+                        <i class="bi bi-info-circle-fill text-info me-2"></i>How This System Works
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <h6><i class="bi bi-1-circle-fill text-primary me-2"></i>Data Source</h6>
+                                <p class="text-muted small">The system uses 997 synthetic fault records based on K-Electric's Korangi, Surjani, Nazimabad, and Clifton areas with weather and kunda (illegal connections) risk data.</p>
+                            </div>
+                            <div class="col-md-3">
+                                <h6><i class="bi bi-2-circle-fill text-primary me-2"></i>Fault Type Prediction</h6>
+                                <p class="text-muted small">The ML model predicts what type of fault is likely (Motor Failure, Short Circuit, Leak, or Sensor Fault) based on plant location, weather, and kunda risk levels.</p>
+                            </div>
+                            <div class="col-md-3">
+                                <h6><i class="bi bi-3-circle-fill text-primary me-2"></i>Restoration Time</h6>
+                                <p class="text-muted small">A regression model estimates repair duration considering fault type, hour of day, weather conditions, and the wind×kunda risk interaction.</p>
+                            </div>
+                            <div class="col-md-3">
+                                <h6><i class="bi bi-4-circle-fill text-primary me-2"></i>Status Legend</h6>
+                                <div class="small text-muted">
+                                    <p class="mb-1"><span class="badge bg-info me-1"><i class="bi bi-plus-circle-fill"></i></span> <strong>New</strong> - Just reported</p>
+                                    <p class="mb-1"><span class="badge bg-warning me-1"><i class="bi bi-hourglass-split"></i></span> <strong>In Progress</strong> - Being repaired</p>
+                                    <p class="mb-1"><span class="badge bg-secondary me-1"><i class="bi bi-pause-circle-fill"></i></span> <strong>On Hold</strong> - Awaiting resources</p>
+                                    <p class="mb-0"><span class="badge bg-success me-1"><i class="bi bi-check-circle-fill"></i></span> <strong>Completed</strong> - Fixed</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-white-50 py-3 mt-4">
+        <div class="container-fluid px-4 text-center">
+            <small>K-Electric Predictive Maintenance System | Final Year Project</small>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>
