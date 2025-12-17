@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Service Coverage Analysis - K-Electric</title>
+    
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    
+    <!-- Leaflet Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    
+    <style>
+        :root {
+            --ke-blue: #00529b;
+            --ke-orange: #f7931e;
+        }
+        
+        body {
+            background: #f0f2f5;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+        
+        .navbar-ke {
+            background: linear-gradient(135deg, var(--ke-blue) 0%, #003d75 100%);
+        }
+        
+        #coverageMap {
+            height: calc(100vh - 56px - 200px);
+            width: 100%;
+            min-height: 500px;
+        }
+        
+        .control-panel {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 15px rgba(0,0,0,0.1);
+            padding: 1.5rem;
+        }
+        
+        .stats-bar {
+            background: white;
+            border-top: 1px solid #eee;
+            padding: 1rem 0;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 1rem;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--ke-blue);
+        }
+        
+        .stat-label {
+            font-size: 0.85rem;
+            color: #666;
+        }
+        
+        .center-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .center-item {
+            padding: 0.75rem;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .center-item:hover {
+            background: #f5f7fa;
+        }
+        
+        .center-item.active {
+            background: #e3f2fd;
+            border-left: 3px solid var(--ke-blue);
+        }
+        
+        .badge-cfc {
+            background: #2196F3;
+            color: white;
+        }
+        
+        .badge-cec {
+            background: #FF9800;
+            color: white;
+        }
+        
+        .isochrone-legend {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255,255,255,0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-dark navbar-ke">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="index.html">
+                <i class="bi bi-lightning-charge-fill me-2"></i>
+                K-Electric Predictive Maintenance
+            </a>
+            <div class="d-flex align-items-center">
+                <a href="index.html" class="btn btn-outline-light btn-sm me-2">
+                    <i class="bi bi-speedometer2 me-1"></i> Dashboard
+                </a>
+                <a href="interactive.html" class="btn btn-outline-light btn-sm">
+                    <i class="bi bi-cursor me-1"></i> Interactive
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid py-3">
+        <div class="row">
+            <!-- Left Panel - Controls -->
+            <div class="col-lg-3">
+                <div class="control-panel mb-3">
+                    <h5 class="mb-3">
+                        <i class="bi bi-sliders me-2"></i>Coverage Controls
+                    </h5>
+                    
+                    <!-- Center Type Filter -->
+                    <div class="mb-3">
+                        <label class="form-label">Center Type</label>
+                        <select class="form-select" id="centerTypeFilter">
+                            <option value="all">All Centers (49)</option>
+                            <option value="CFC">CFC Only (22)</option>
+                            <option value="CEC">CEC Only (27)</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Show Isochrones Toggle -->
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="showIsochrones">
+                        <label class="form-check-label" for="showIsochrones">
+                            Show Coverage Zones
+                        </label>
+                    </div>
+                    
+                    <!-- Show Plants Toggle -->
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="showPlants" checked>
+                        <label class="form-check-label" for="showPlants">
+                            Show Grid Stations (4 Plants)
+                        </label>
+                    </div>
+                    
+                    <hr>
+                    
+                    <!-- API Status -->
+                    <div class="mb-3">
+                        <label class="form-label">Data Status</label>
+                        <div id="apiStatus">
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="badge bg-success me-2">✓</span>
+                                <span>Weather API (Open-Meteo)</span>
+                            </div>
+                            <div class="d-flex align-items-center mb-2" id="orsStatus">
+                                <span class="badge bg-success me-2">✓</span>
+                                <span>Coverage Data Ready</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Center List -->
+                <div class="control-panel">
+                    <h6 class="mb-3">
+                        <i class="bi bi-building me-2"></i>Service Centers
+                        <span class="badge bg-primary float-end" id="centerCount">0</span>
+                    </h6>
+                    
+                    <input type="text" class="form-control mb-3" id="centerSearch" placeholder="Search centers...">
+                    
+                    <div class="center-list" id="centerList">
+                        <div class="text-center py-4 text-muted">
+                            <div class="spinner-border spinner-border-sm"></div>
+                            Loading centers...
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Map -->
+            <div class="col-lg-9">
+                <div class="position-relative">
+                    <div id="coverageMap"></div>
+                    
+                    <!-- Legend -->
+                    <div class="isochrone-legend position-absolute" style="bottom: 20px; left: 20px; z-index: 1000;">
+                        <h6 class="mb-2">Legend</h6>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #2196F3;"></div>
+                            <span>CFC (Customer Facilitation Center)</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #FF9800;"></div>
+                            <span>CEC (Customer Experience Center)</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #27ae60; opacity: 0.4;"></div>
+                            <span>10 min coverage</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #f39c12; opacity: 0.4;"></div>
+                            <span>20 min coverage</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #e74c3c; opacity: 0.4;"></div>
+                            <span>30 min coverage</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Stats Bar -->
+    <div class="stats-bar">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value" id="totalCenters">49</div>
+                        <div class="stat-label">Total Service Centers</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value text-primary" id="cfcCount">22</div>
+                        <div class="stat-label">CFC (Facilitation)</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value text-warning" id="cecCount">27</div>
+                        <div class="stat-label">CEC (Experience)</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value text-success">4</div>
+                        <div class="stat-label">Grid Stations (Plants)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        
+        let map = null;
+        let centersData = [];
+        let centersLayer = null;
+        let plantsLayer = null;
+        let isochroneLayer = null;
+        let selectedCenter = null;
+        let cachedIsochrones = null;  // Pre-computed isochrone data
+        
+        // Plant data
+        const plants = [
+            { id: 'PLANT_01', name: 'Korangi Grid Station', lat: 24.831, lng: 67.132, risk: 'Extreme', color: '#dc3545' },
+            { id: 'PLANT_02', name: 'Surjani Substation', lat: 25.002, lng: 67.062, risk: 'High', color: '#fd7e14' },
+            { id: 'PLANT_03', name: 'Nazimabad Substation', lat: 24.912, lng: 67.042, risk: 'Medium', color: '#ffc107' },
+            { id: 'MAINT_01', name: 'Clifton Maintenance Hub', lat: 24.815, lng: 67.028, risk: 'Secure', color: '#28a745' }
+        ];
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            initMap();
+            await loadCachedIsochrones();  // Load cached data first
+            await loadCenters();
+            loadPlants();
+            setupEventListeners();
+        });
+        
+        async function loadCachedIsochrones() {
+            try {
+                const res = await fetch('/data/cached_isochrones.json');
+                cachedIsochrones = await res.json();
+                console.log(`Loaded cached isochrones for ${cachedIsochrones.centers.length} centers`);
+                
+                document.getElementById('orsStatus').innerHTML = `
+                    <span class="badge bg-success me-2">✓</span>
+                    <span>Coverage Data Ready (${cachedIsochrones.centers.length} centers)</span>
+                `;
+            } catch (error) {
+                console.error('Error loading cached isochrones:', error);
+                document.getElementById('orsStatus').innerHTML = `
+                    <span class="badge bg-warning me-2">!</span>
+                    <span>Coverage Data - Loading failed</span>
+                `;
+            }
+        }
+        
+        function initMap() {
+            map = L.map('coverageMap').setView([24.87, 67.05], 11);
+            
+            // Add multiple tile options
+            const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap'
+            });
+            
+            const cartoLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '© CartoDB'
+            });
+            
+            cartoLight.addTo(map);
+            
+            // Layer control
+            L.control.layers({
+                'Light': cartoLight,
+                'Street': osmLayer
+            }).addTo(map);
+            
+            // Initialize layer groups
+            centersLayer = L.layerGroup().addTo(map);
+            plantsLayer = L.layerGroup().addTo(map);
+            isochroneLayer = L.layerGroup().addTo(map);
+        }
+        
+        async function loadCenters() {
+            try {
+                const res = await fetch(`${API_BASE}/centers/all`);
+                const data = await res.json();
+                
+                centersData = data.centers;
+                
+                // Update stats
+                document.getElementById('totalCenters').textContent = data.total;
+                document.getElementById('cfcCount').textContent = data.cfc_count;
+                document.getElementById('cecCount').textContent = data.cec_count;
+                document.getElementById('centerCount').textContent = data.total;
+                
+                // Render centers on map
+                renderCenters();
+                
+                // Render center list
+                renderCenterList();
+                
+            } catch (error) {
+                console.error('Centers load error:', error);
+                document.getElementById('centerList').innerHTML = `
+                    <div class="alert alert-danger">
+                        Error loading centers. Is the API running?
+                    </div>
+                `;
+            }
+        }
+        
+        function renderCenters() {
+            centersLayer.clearLayers();
+            
+            const filter = document.getElementById('centerTypeFilter').value;
+            
+            centersData.forEach(center => {
+                if (filter !== 'all' && center.type !== filter) return;
+                
+                const color = center.type === 'CFC' ? '#2196F3' : '#FF9800';
+                const isSelected = selectedCenter && selectedCenter.name === center.name;
+                
+                const marker = L.circleMarker([center.lat, center.lng], {
+                    radius: isSelected ? 12 : 8,
+                    fillColor: color,
+                    color: isSelected ? '#333' : 'white',
+                    weight: isSelected ? 3 : 2,
+                    fillOpacity: 0.8
+                });
+                
+                marker.bindPopup(`
+                    <div style="min-width: 180px;">
+                        <h6 class="mb-2">${center.name}</h6>
+                        <p class="mb-1"><strong>Type:</strong> <span class="badge ${center.type === 'CFC' ? 'badge-cfc' : 'badge-cec'}">${center.type}</span></p>
+                        <p class="mb-1"><strong>Area:</strong> ${center.area}</p>
+                        <button class="btn btn-sm btn-primary mt-2" onclick="showIsochrone('${center.name}')">
+                            <i class="bi bi-geo me-1"></i>Show Coverage
+                        </button>
+                    </div>
+                `);
+                
+                marker.on('click', () => selectCenter(center));
+                
+                centersLayer.addLayer(marker);
+            });
+        }
+        
+        function loadPlants() {
+            plantsLayer.clearLayers();
+            
+            if (!document.getElementById('showPlants').checked) return;
+            
+            plants.forEach(plant => {
+                const icon = L.divIcon({
+                    html: `<i class="bi bi-lightning-charge-fill" style="font-size: 28px; color: ${plant.color}; text-shadow: 0 0 5px white;"></i>`,
+                    className: '',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                });
+                
+                L.marker([plant.lat, plant.lng], { icon })
+                    .bindPopup(`
+                        <h6>${plant.name}</h6>
+                        <p>Risk Level: <strong style="color: ${plant.color};">${plant.risk}</strong></p>
+                        <p class="small text-muted">ID: ${plant.id}</p>
+                    `)
+                    .addTo(plantsLayer);
+            });
+        }
+        
+        function renderCenterList() {
+            const list = document.getElementById('centerList');
+            const filter = document.getElementById('centerTypeFilter').value;
+            const search = document.getElementById('centerSearch').value.toLowerCase();
+            
+            let filtered = centersData;
+            
+            if (filter !== 'all') {
+                filtered = filtered.filter(c => c.type === filter);
+            }
+            
+            if (search) {
+                filtered = filtered.filter(c => 
+                    c.name.toLowerCase().includes(search) ||
+                    c.area.toLowerCase().includes(search)
+                );
+            }
+            
+            document.getElementById('centerCount').textContent = filtered.length;
+            
+            if (filtered.length === 0) {
+                list.innerHTML = '<div class="text-center py-4 text-muted">No centers found</div>';
+                return;
+            }
+            
+            list.innerHTML = filtered.map(center => `
+                <div class="center-item ${selectedCenter && selectedCenter.name === center.name ? 'active' : ''}" 
+                     onclick="selectCenterByName('${center.name}')">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="fw-semibold">${center.name}</div>
+                            <div class="small text-muted">${center.area}</div>
+                        </div>
+                        <span class="badge ${center.type === 'CFC' ? 'badge-cfc' : 'badge-cec'}">${center.type}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function selectCenterByName(name) {
+            const center = centersData.find(c => c.name === name);
+            if (center) selectCenter(center);
+        }
+        
+        function selectCenter(center) {
+            selectedCenter = center;
+            
+            // Re-render to highlight
+            renderCenters();
+            renderCenterList();
+            
+            // Pan to center
+            map.setView([center.lat, center.lng], 13);
+            
+            // Show isochrone if enabled
+            if (document.getElementById('showIsochrones').checked) {
+                showIsochrone(center.name);
+            }
+        }
+        
+        async function showIsochrone(centerName) {
+            const center = centersData.find(c => c.name === centerName);
+            if (!center) return;
+            
+            isochroneLayer.clearLayers();
+            
+            // Try to find in cached data first
+            if (cachedIsochrones) {
+                const cachedCenter = cachedIsochrones.centers.find(c => c.name === centerName);
+                
+                if (cachedCenter && cachedCenter.zones) {
+                    // Show all three zones (30, 20, 10 - outer to inner) from cached data
+                    const zoneTimes = [30, 20, 10];
+                    
+                    zoneTimes.forEach(time => {
+                        const zone = cachedCenter.zones[time];
+                        if (zone && zone.coordinates && zone.coordinates.length > 0) {
+                            const color = getIsochroneColor(time);
+                            
+                            L.polygon(zone.coordinates, {
+                                color: '#2980b9',
+                                fillColor: color,
+                                fillOpacity: zone.fillOpacity || (time === 10 ? 0.4 : time === 20 ? 0.3 : 0.2),
+                                weight: 1
+                            })
+                            .bindPopup(`<strong>${center.name}</strong><br>${time} min drive zone<br><em>Pre-computed coverage area</em>`)
+                            .addTo(isochroneLayer);
+                        }
+                    });
+                    
+                    console.log(`Showing cached coverage for ${centerName}`);
+                    return;
+                }
+            }
+            
+            // Fallback to simple circle if no cached data (default 20 min)
+            const timeMinutes = 20;
+            const avgSpeed = 30; // km/h
+            const radiusKm = (avgSpeed * timeMinutes) / 60;
+            
+            L.circle([center.lat, center.lng], {
+                radius: radiusKm * 1000,
+                color: '#999',
+                fillColor: '#999',
+                fillOpacity: 0.2,
+                weight: 2,
+                dashArray: '5, 5'
+            })
+            .bindPopup(`<strong>${center.name}</strong><br>${timeMinutes} min (estimated circle)<br><em>No cached coverage data available</em>`)
+            .addTo(isochroneLayer);
+        }
+        
+        function getIsochroneColor(minutes) {
+            if (minutes <= 10) return '#27ae60';
+            if (minutes <= 20) return '#f39c12';
+            return '#e74c3c';
+        }
+        
+        function setupEventListeners() {
+            // Center type filter
+            document.getElementById('centerTypeFilter').addEventListener('change', () => {
+                renderCenters();
+                renderCenterList();
+            });
+            
+            // Search
+            document.getElementById('centerSearch').addEventListener('input', renderCenterList);
+            
+            // Show isochrones toggle (for single center)
+            document.getElementById('showIsochrones').addEventListener('change', (e) => {
+                if (e.target.checked && selectedCenter) {
+                    showIsochrone(selectedCenter.name);
+                } else if (!e.target.checked) {
+                    isochroneLayer.clearLayers();
+                }
+            });
+            
+            // Show plants toggle
+            document.getElementById('showPlants').addEventListener('change', loadPlants);
+        }
+    </script>
+</body>
+</html>

@@ -17,3 +17,6 @@ joblib==1.3.2
 # Additional utilities
 python-multipart==0.0.6
 pydantic==2.5.3
+
+# HTTP requests (for ORS and Weather APIs)
+requests==2.31.0

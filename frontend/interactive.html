@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Fault Prediction - K-Electric</title>
+    
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    
+    <!-- Leaflet Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    
+    <style>
+        :root {
+            --ke-blue: #00529b;
+            --ke-orange: #f7931e;
+        }
+        
+        body {
+            background: #f0f2f5;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+        
+        .navbar-ke {
+            background: linear-gradient(135deg, var(--ke-blue) 0%, #003d75 100%);
+        }
+        
+        #faultMap {
+            height: calc(100vh - 56px);
+            width: 100%;
+        }
+        
+        .sidebar {
+            position: fixed;
+            top: 56px;
+            right: 0;
+            width: 420px;
+            height: calc(100vh - 56px);
+            background: white;
+            box-shadow: -5px 0 20px rgba(0,0,0,0.1);
+            overflow-y: auto;
+            z-index: 1000;
+            transition: transform 0.3s ease;
+        }
+        
+        .sidebar.collapsed {
+            transform: translateX(100%);
+        }
+        
+        .sidebar-toggle {
+            position: fixed;
+            top: 70px;
+            right: 420px;
+            z-index: 1001;
+            background: var(--ke-blue);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 8px 0 0 8px;
+            cursor: pointer;
+            transition: right 0.3s ease;
+        }
+        
+        .sidebar.collapsed + .sidebar-toggle {
+            right: 0;
+        }
+        
+        .weather-card {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+        
+        .weather-value {
+            font-size: 2rem;
+            font-weight: 700;
+        }
+        
+        .prediction-card {
+            background: linear-gradient(135deg, #f5f7fa, #e8ecf1);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-top: 1rem;
+        }
+        
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .result-item:last-child {
+            border-bottom: none;
+        }
+        
+        .result-label {
+            color: #666;
+        }
+        
+        .result-value {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .eta-highlight {
+            background: linear-gradient(135deg, #11998e, #38ef7d);
+            color: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            margin-top: 1rem;
+        }
+        
+        .eta-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+        }
+        
+        .risk-badge {
+            padding: 0.35rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        
+        .risk-extreme { background: #fce4e4; color: #dc3545; }
+        .risk-high { background: #fff3e0; color: #e65100; }
+        .risk-medium { background: #fff8e1; color: #f57c00; }
+        .risk-secure { background: #e8f5e9; color: #28a745; }
+        
+        .instruction-card {
+            background: #e3f2fd;
+            border-radius: 12px;
+            padding: 1.5rem;
+            border-left: 4px solid var(--ke-blue);
+        }
+        
+        .center-marker {
+            background: #2196F3;
+            border: 3px solid white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+        }
+        
+        .fault-marker {
+            background: #f44336;
+            border: 3px solid white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+        }
+        
+        .plant-marker {
+            font-size: 24px;
+        }
+
+        /* Leaflet popup styling */
+        .leaflet-popup-content-wrapper {
+            border-radius: 12px;
+        }
+        
+        .popup-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-dark navbar-ke">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="index.html">
+                <i class="bi bi-lightning-charge-fill me-2"></i>
+                K-Electric Predictive Maintenance
+            </a>
+            <div class="d-flex align-items-center">
+                <a href="index.html" class="btn btn-outline-light btn-sm me-2">
+                    <i class="bi bi-speedometer2 me-1"></i> Dashboard
+                </a>
+                <a href="coverage.html" class="btn btn-outline-light btn-sm me-2">
+                    <i class="bi bi-geo-alt me-1"></i> Coverage
+                </a>
+                <span class="badge bg-warning text-dark">
+                    <i class="bi bi-cloud-sun me-1"></i>
+                    <span id="liveTemp">--</span>°C
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Map Container -->
+    <div id="faultMap"></div>
+
+    <!-- Sidebar Toggle -->
+    <button class="sidebar-toggle" onclick="toggleSidebar()">
+        <i class="bi bi-chevron-left" id="toggleIcon"></i>
+    </button>
+
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+        <div class="p-4">
+            <h5 class="mb-3">
+                <i class="bi bi-cursor-fill text-primary me-2"></i>
+                Interactive Fault Prediction
+            </h5>
+            
+            <!-- Instructions -->
+            <div class="instruction-card mb-4" id="instructionCard">
+                <h6><i class="bi bi-info-circle me-2"></i>How to Use</h6>
+                <ol class="mb-0 ps-3">
+                    <li>Click anywhere on the map to place a fault</li>
+                    <li>System will fetch live weather data</li>
+                    <li>ML models predict fault type & repair time</li>
+                    <li>Routing calculates nearest service center ETA</li>
+                </ol>
+            </div>
+            
+            <!-- Live Weather -->
+            <div class="weather-card mb-4">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="small opacity-75">Live Weather - Karachi</div>
+                        <div class="weather-value"><span id="weatherTemp">--</span>°C</div>
+                        <div class="small">
+                            <i class="bi bi-wind me-1"></i><span id="weatherWind">--</span> km/h
+                            <span class="ms-2"><i class="bi bi-droplet me-1"></i><span id="weatherHumidity">--</span>%</span>
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <i class="bi bi-cloud-sun" style="font-size: 2.5rem; opacity: 0.8;"></i>
+                        <div class="small mt-1" id="weatherSource">Loading...</div>
+                    </div>
+                </div>
+                <div class="mt-3 pt-3 border-top border-light border-opacity-25">
+                    <div class="small">
+                        <i class="bi bi-clock me-1"></i>Traffic: <strong id="trafficPeriod">--</strong>
+                        <span class="float-end">Factor: <strong id="trafficFactor">--</strong>x</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Selected Location -->
+            <div id="selectedLocation" style="display: none;">
+                <div class="card mb-3">
+                    <div class="card-header bg-danger text-white">
+                        <i class="bi bi-geo-alt-fill me-2"></i>Fault Location
+                    </div>
+                    <div class="card-body">
+                        <div class="result-item">
+                            <span class="result-label">Coordinates</span>
+                            <span class="result-value" id="faultCoords">--</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">Nearest Area</span>
+                            <span class="result-value" id="faultArea">--</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">Kunda Risk</span>
+                            <span id="faultRisk">--</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Prediction Results -->
+                <div class="prediction-card">
+                    <h6 class="mb-3"><i class="bi bi-cpu me-2"></i>ML Prediction</h6>
+                    <div class="result-item">
+                        <span class="result-label">Predicted Fault</span>
+                        <span class="result-value">
+                            <i class="bi" id="faultIcon"></i>
+                            <span id="faultType">--</span>
+                        </span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">Repair Time</span>
+                        <span class="result-value" id="repairTime">--</span>
+                    </div>
+                </div>
+                
+                <!-- Response Info -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <i class="bi bi-truck me-2"></i>Service Response
+                    </div>
+                    <div class="card-body">
+                        <div class="result-item">
+                            <span class="result-label">Nearest Center</span>
+                            <span class="result-value" id="nearestCenter">--</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">Center Type</span>
+                            <span class="result-value" id="centerType">--</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">Distance</span>
+                            <span class="result-value" id="centerDistance">--</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">Travel Time</span>
+                            <span class="result-value" id="travelTime">--</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">Routing</span>
+                            <span class="result-value small" id="routingSource">--</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Total ETA -->
+                <div class="eta-highlight">
+                    <div class="small opacity-75">Total Estimated Resolution</div>
+                    <div class="eta-value" id="totalETA">--</div>
+                    <div class="small">(Travel + Repair Time)</div>
+                </div>
+                
+                <!-- Reset Button -->
+                <button class="btn btn-outline-secondary w-100 mt-3" onclick="resetPrediction()">
+                    <i class="bi bi-arrow-counterclockwise me-2"></i>Clear & Start Over
+                </button>
+            </div>
+            
+            <!-- Legend -->
+            <div class="mt-4 pt-4 border-top">
+                <h6 class="text-muted mb-3">Map Legend</h6>
+                <div class="d-flex flex-wrap gap-3">
+                    <div><span style="color: #f44336;">●</span> Fault Location</div>
+                    <div><span style="color: #2196F3;">●</span> Service Center (CFC)</div>
+                    <div><span style="color: #FF9800;">●</span> Service Center (CEC)</div>
+                    <div><span style="color: #dc3545;">⚡</span> Extreme Risk Plant</div>
+                    <div><span style="color: #28a745;">⚡</span> Secure Plant</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        
+        let map = null;
+        let faultMarker = null;
+        let centerMarker = null;
+        let routeLine = null;
+        let centersLayer = null;
+        let plantsLayer = null;
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            initMap();
+            await loadWeather();
+            await loadCenters();
+            loadPlants();
+        });
+        
+        function initMap() {
+            map = L.map('faultMap').setView([24.87, 67.05], 11);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+            
+            // Click handler for fault placement
+            map.on('click', async (e) => {
+                await placeFault(e.latlng.lat, e.latlng.lng);
+            });
+        }
+        
+        async function loadWeather() {
+            try {
+                const res = await fetch(`${API_BASE}/weather/current`);
+                const data = await res.json();
+                
+                document.getElementById('weatherTemp').textContent = Math.round(data.current.temperature);
+                document.getElementById('liveTemp').textContent = Math.round(data.current.temperature);
+                document.getElementById('weatherWind').textContent = Math.round(data.current.wind_speed);
+                document.getElementById('weatherHumidity').textContent = data.current.humidity || '--';
+                document.getElementById('weatherSource').textContent = data.current.source;
+                document.getElementById('trafficPeriod').textContent = data.time_period;
+                document.getElementById('trafficFactor').textContent = data.traffic_factor;
+            } catch (error) {
+                console.error('Weather load error:', error);
+            }
+        }
+        
+        async function loadCenters() {
+            try {
+                const res = await fetch(`${API_BASE}/centers/all`);
+                const data = await res.json();
+                
+                centersLayer = L.layerGroup();
+                
+                data.centers.forEach(center => {
+                    const color = center.type === 'CFC' ? '#2196F3' : '#FF9800';
+                    
+                    L.circleMarker([center.lat, center.lng], {
+                        radius: 8,
+                        fillColor: color,
+                        color: 'white',
+                        weight: 2,
+                        fillOpacity: 0.8
+                    })
+                    .bindPopup(`
+                        <div class="popup-title">${center.name}</div>
+                        <div>Type: <strong>${center.type}</strong></div>
+                        <div>Area: ${center.area}</div>
+                    `)
+                    .addTo(centersLayer);
+                });
+                
+                centersLayer.addTo(map);
+            } catch (error) {
+                console.error('Centers load error:', error);
+            }
+        }
+        
+        function loadPlants() {
+            const plants = [
+                { id: 'PLANT_01', name: 'Korangi Grid Station', lat: 24.831, lng: 67.132, risk: 'Extreme', color: '#dc3545' },
+                { id: 'PLANT_02', name: 'Surjani Substation', lat: 25.002, lng: 67.062, risk: 'High', color: '#fd7e14' },
+                { id: 'PLANT_03', name: 'Nazimabad Substation', lat: 24.912, lng: 67.042, risk: 'Medium', color: '#ffc107' },
+                { id: 'MAINT_01', name: 'Clifton Maintenance Hub', lat: 24.815, lng: 67.028, risk: 'Secure', color: '#28a745' }
+            ];
+            
+            plantsLayer = L.layerGroup();
+            
+            plants.forEach(plant => {
+                const icon = L.divIcon({
+                    html: `<i class="bi bi-lightning-charge-fill" style="font-size: 24px; color: ${plant.color};"></i>`,
+                    className: 'plant-marker',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                });
+                
+                L.marker([plant.lat, plant.lng], { icon })
+                    .bindPopup(`
+                        <div class="popup-title">${plant.name}</div>
+                        <div>Risk Level: <strong style="color: ${plant.color};">${plant.risk}</strong></div>
+                        <div>ID: ${plant.id}</div>
+                    `)
+                    .addTo(plantsLayer);
+            });
+            
+            plantsLayer.addTo(map);
+        }
+        
+        async function placeFault(lat, lng) {
+            // Show loading
+            document.getElementById('instructionCard').style.display = 'none';
+            document.getElementById('selectedLocation').style.display = 'block';
+            document.getElementById('faultCoords').textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            
+            // Clear previous markers
+            if (faultMarker) map.removeLayer(faultMarker);
+            if (centerMarker) map.removeLayer(centerMarker);
+            if (routeLine) map.removeLayer(routeLine);
+            
+            // Add fault marker
+            const faultIcon = L.divIcon({
+                html: '<i class="bi bi-exclamation-triangle-fill" style="font-size: 28px; color: #f44336;"></i>',
+                className: 'fault-marker-icon',
+                iconSize: [30, 30],
+                iconAnchor: [15, 15]
+            });
+            
+            faultMarker = L.marker([lat, lng], { icon: faultIcon }).addTo(map);
+            
+            try {
+                // Call interactive prediction API
+                const res = await fetch(`${API_BASE}/predict/interactive`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lat, lng })
+                });
+                
+                const data = await res.json();
+                
+                // Update UI with results
+                updatePredictionUI(data);
+                
+                // Add center marker and route line
+                if (data.response.center_coordinates.lat) {
+                    const centerIcon = L.divIcon({
+                        html: '<i class="bi bi-building" style="font-size: 24px; color: #2196F3;"></i>',
+                        className: 'center-marker-icon',
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15]
+                    });
+                    
+                    centerMarker = L.marker(
+                        [data.response.center_coordinates.lat, data.response.center_coordinates.lng],
+                        { icon: centerIcon }
+                    ).addTo(map);
+                    
+                    // Draw route line
+                    routeLine = L.polyline([
+                        [data.response.center_coordinates.lat, data.response.center_coordinates.lng],
+                        [lat, lng]
+                    ], {
+                        color: '#2196F3',
+                        weight: 3,
+                        dashArray: '10, 10'
+                    }).addTo(map);
+                    
+                    // Fit bounds
+                    map.fitBounds(routeLine.getBounds().pad(0.2));
+                }
+                
+            } catch (error) {
+                console.error('Prediction error:', error);
+                alert('Error getting prediction. Make sure the API server is running.');
+            }
+        }
+        
+        function updatePredictionUI(data) {
+            // Location info
+            document.getElementById('faultArea').textContent = data.location.nearest_area;
+            document.getElementById('faultRisk').innerHTML = getRiskBadge(data.location.risk_level);
+            
+            // Prediction
+            document.getElementById('faultIcon').className = `bi bi-${data.predictions.fault_icon} me-1`;
+            document.getElementById('faultType').textContent = data.predictions.fault_type;
+            document.getElementById('repairTime').textContent = data.predictions.restoration_formatted;
+            
+            // Response
+            document.getElementById('nearestCenter').textContent = data.response.nearest_center;
+            document.getElementById('centerType').textContent = data.response.center_type;
+            document.getElementById('centerDistance').textContent = `${data.response.distance_km} km`;
+            document.getElementById('travelTime').textContent = `${data.response.travel_time_min} min`;
+            document.getElementById('routingSource').textContent = 
+                data.response.routing_source === 'ors' ? '✓ ORS (accurate)' : '~ Estimated';
+            
+            // Total ETA
+            document.getElementById('totalETA').textContent = data.total_eta.formatted;
+        }
+        
+        function getRiskBadge(risk) {
+            const classes = {
+                'Extreme': 'risk-extreme',
+                'High': 'risk-high',
+                'Medium': 'risk-medium',
+                'Secure': 'risk-secure'
+            };
+            return `<span class="risk-badge ${classes[risk] || ''}">${risk}</span>`;
+        }
+        
+        function resetPrediction() {
+            if (faultMarker) map.removeLayer(faultMarker);
+            if (centerMarker) map.removeLayer(centerMarker);
+            if (routeLine) map.removeLayer(routeLine);
+            
+            faultMarker = null;
+            centerMarker = null;
+            routeLine = null;
+            
+            document.getElementById('instructionCard').style.display = 'block';
+            document.getElementById('selectedLocation').style.display = 'none';
+            
+            map.setView([24.87, 67.05], 11);
+        }
+        
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const icon = document.getElementById('toggleIcon');
+            
+            sidebar.classList.toggle('collapsed');
+            
+            if (sidebar.classList.contains('collapsed')) {
+                icon.className = 'bi bi-chevron-right';
+            } else {
+                icon.className = 'bi bi-chevron-left';
+            }
+        }
+    </script>
+</body>
+</html>
