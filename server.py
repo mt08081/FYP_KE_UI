@@ -52,9 +52,11 @@ app.add_middleware(
 )
 
 # Serve frontend static files
-app.mount("/static", StaticFiles(directory="frontend"), name="static")
-# Serve data files (for cached isochrones)
-app.mount("/data", StaticFiles(directory="data"), name="data")
+if os.path.exists("frontend"):
+    app.mount("/static", StaticFiles(directory="frontend"), name="static")
+
+if os.path.exists("data"):
+    app.mount("/data", StaticFiles(directory="data"), name="data")
 
 # ============================================
 # PATHS (Clean structure)
