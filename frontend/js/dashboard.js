@@ -4,7 +4,7 @@
  * Clean, intuitive, data-driven dashboard
  */
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = 'https://fypkeui-production.up.railway.app';
 
 // State
 let dashboardData = null;
